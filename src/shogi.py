@@ -15,11 +15,13 @@ class Move:
         else:
             return f"Move from ({self.from_x}, {self.from_y}) to ({self.to_x}, {self.to_y}) {'(promote)' if self.promote else ''}"
 
+
 class Player:
     def __init__(self, name, owner_id):
         self.name = name
         self.owner = owner_id
         self.captured_pieces = []
+
 
 class Piece:
     def __init__(self, owner, promoted=False):
@@ -31,7 +33,7 @@ class Piece:
 
     def name(self):
         raise NotImplementedError("This method should be implemented by subclasses")
-    
+
     def short_name(self):
         return self.name()[-1]
 
@@ -45,23 +47,38 @@ class Piece:
                 nx, ny = x + dx * i, y + dy * i
                 if not (0 <= nx < 5 and 0 <= ny < 5):
                     break
-                
+
                 target = board.get(nx, ny)
                 if not target or target.owner != self.owner:
                     moves.append((nx, ny))
-                
+
                 if target:
                     break
         return moves
 
+
 class Ohsho(Piece):
-    def name(self): return "王"
+    def name(self):
+        return "王"
+
     def legal_moves(self, x, y, board):
-        directions = [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)]
+        directions = [
+            (-1, -1),
+            (0, -1),
+            (1, -1),
+            (-1, 0),
+            (1, 0),
+            (-1, 1),
+            (0, 1),
+            (1, 1),
+        ]
         return self._get_moves_in_directions(x, y, directions, 1, board)
 
+
 class Hisha(Piece):
-    def name(self): return "竜" if self.promoted else "飛"
+    def name(self):
+        return "竜" if self.promoted else "飛"
+
     def legal_moves(self, x, y, board):
         # 飛車の動き
         directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
@@ -71,8 +88,11 @@ class Hisha(Piece):
             moves.extend(self._get_moves_in_directions(x, y, diag_directions, 1))
         return moves
 
+
 class Kakugyo(Piece):
-    def name(self): return "馬" if self.promoted else "角"
+    def name(self):
+        return "馬" if self.promoted else "角"
+
     def legal_moves(self, x, y, board):
         directions = [(1, 1), (-1, -1), (1, -1), (-1, 1)]
         moves = self._get_moves_in_directions(x, y, directions, 5, board)
@@ -81,10 +101,11 @@ class Kakugyo(Piece):
             moves.extend(self._get_moves_in_directions(x, y, straight_directions, 1))
         return moves
 
+
 def _get_kinsho_moves(x, y, owner, board):
     f_dy = -1 if owner == 0 else 1
     directions = [(-1, f_dy), (0, f_dy), (1, f_dy), (-1, 0), (1, 0), (0, -f_dy)]
-    
+
     moves = []
     for dx, dy in directions:
         nx, ny = x + dx, y + dy
@@ -95,31 +116,43 @@ def _get_kinsho_moves(x, y, owner, board):
             moves.append((nx, ny))
     return moves
 
+
 class Kinsho(Piece):
-    def name(self): return "金"
+    def name(self):
+        return "金"
+
     def legal_moves(self, x, y, board):
         return _get_kinsho_moves(x, y, self.owner, board)
 
+
 class Ginsho(Piece):
-    def name(self): return "金" if self.promoted else "銀"
+    def name(self):
+        return "金" if self.promoted else "銀"
+
     def legal_moves(self, x, y, board):
         if self.promoted:
             return _get_kinsho_moves(x, y, self.owner, board)
-        
+
         f_dy = -1 if self.owner == 0 else 1
         directions = [(-1, f_dy), (0, f_dy), (1, f_dy), (-1, -f_dy), (1, -f_dy)]
         return self._get_moves_in_directions(x, y, directions, 1, board)
 
+
 class Hohei(Piece):
-    def name(self): return "と" if self.promoted else "歩"
-    def short_name(self): return "と" if self.promoted else "歩"
+    def name(self):
+        return "と" if self.promoted else "歩"
+
+    def short_name(self):
+        return "と" if self.promoted else "歩"
+
     def legal_moves(self, x, y, board):
         if self.promoted:
             return _get_kinsho_moves(x, y, self.owner, board)
-            
+
         f_dy = -1 if self.owner == 0 else 1
         directions = [(0, f_dy)]
         return self._get_moves_in_directions(x, y, directions, 1, board)
+
 
 class Board:
     def __init__(self):
@@ -133,7 +166,7 @@ class Board:
         self.grid[0][3] = Kinsho(1)
         self.grid[0][4] = Ohsho(1)
         self.grid[1][4] = Hohei(1)
-        
+
         self.grid[4][0] = Ohsho(0)
         self.grid[4][1] = Kinsho(0)
         self.grid[4][2] = Ginsho(0)
@@ -141,13 +174,14 @@ class Board:
         self.grid[4][4] = Hisha(0)
         self.grid[3][0] = Hohei(0)
 
-    def apply(self, move: 'Move', players):
+    def apply(self, move: "Move", players):
         if move.piece_to_drop:
             piece = move.piece_to_drop
             self.set(move.to_x, move.to_y, piece)
         else:
             piece = self.get(move.from_x, move.from_y)
-            if piece is None: return
+            if piece is None:
+                return
 
             target = self.get(move.to_x, move.to_y)
             if target:
@@ -158,23 +192,26 @@ class Board:
 
             if move.promote:
                 piece.promoted = True
-            
+
             self.set(move.to_x, move.to_y, piece)
             self.set(move.from_x, move.from_y, None)
 
     def get(self, x, y):
         return self.grid[y][x]
 
-    def set(self, x, y, piece: 'Piece'):
+    def set(self, x, y, piece: "Piece"):
         self.grid[y][x] = piece
 
     def clone(self):
         return copy.deepcopy(self)
 
     def display(self, players):
-        print("\n後手(Player 1) 持ち駒:", ' '.join([p.short_name() for p in players[1].captured_pieces]) or "なし")
-        print("  0 1 2 3 4")
-        print("-------------")
+        print(
+            "\n後手(Player 1) 持ち駒:",
+            " ".join([p.short_name() for p in players[1].captured_pieces]) or "なし",
+        )
+        print("   0　1　2　3　4")
+        print("------------------")
         for y, row in enumerate(self.grid):
             print(f"{y}|", end="")
             for piece in row:
@@ -182,10 +219,16 @@ class Board:
                     print(" ・", end="")
                 else:
                     # 後手の駒はvで表現
-                    print(f"{'v' if piece.owner == 1 else 'm'}{piece.short_name()}", end="")
+                    print(
+                        f"{'v' if piece.owner == 1 else 'm'}{piece.short_name()}",
+                        end="",
+                    )
             print()
-        print("-------------")
-        print("先手(Player 0) 持ち駒:", ' '.join([p.short_name() for p in players[0].captured_pieces]) or "なし")
+        print("------------------")
+        print(
+            "先手(Player 0) 持ち駒:",
+            " ".join([p.short_name() for p in players[0].captured_pieces]) or "なし",
+        )
 
 
 class Rule:
@@ -201,18 +244,21 @@ class Rule:
         piece = board.get(move.from_x, move.from_y)
         if piece is None or piece.owner != player.owner:
             return False
-        
+
         legal_destinations = piece.legal_moves(move.from_x, move.from_y, board)
         if (move.to_x, move.to_y) not in legal_destinations:
             return False
-            
+
         if move.promote:
             promotion_zone_start = 0 if player.owner == 0 else 4
-            can_promote = (
-                (move.from_y == promotion_zone_start) or 
-                (move.to_y == promotion_zone_start)
+            can_promote = (move.from_y == promotion_zone_start) or (
+                move.to_y == promotion_zone_start
             )
-            if not isinstance(piece, (Ohsho, Kinsho)) and not piece.promoted and can_promote:
+            if (
+                not isinstance(piece, (Ohsho, Kinsho))
+                and not piece.promoted
+                and can_promote
+            ):
                 pass
             else:
                 return False
@@ -230,13 +276,18 @@ class Rule:
         piece_to_drop = move.piece_to_drop
         x, y = move.to_x, move.to_y
 
-        if board.get(x,y) is not None:
+        if board.get(x, y) is not None:
             return False
-        
+
         if isinstance(piece_to_drop, Hohei):
             for row in range(5):
                 p = board.get(x, row)
-                if p and isinstance(p, Hohei) and not p.promoted and p.owner == player.owner:
+                if (
+                    p
+                    and isinstance(p, Hohei)
+                    and not p.promoted
+                    and p.owner == player.owner
+                ):
                     print("二歩です。")
                     return False
 
@@ -247,7 +298,6 @@ class Rule:
             return False
 
         return True
-
 
     @staticmethod
     def is_in_check(board, owner):
@@ -260,8 +310,9 @@ class Rule:
                     break
             if king_pos:
                 break
-        
-        if not king_pos: return True
+
+        if not king_pos:
+            return True
 
         opponent_owner = 1 - owner
         for y in range(5):
@@ -276,25 +327,27 @@ class Rule:
     def is_checkmate(board, player, players):
         if not Rule.is_in_check(board, player.owner):
             return False
-        
+
         for y in range(5):
             for x in range(5):
-                piece = board.get(x,y)
+                piece = board.get(x, y)
                 if piece and piece.owner == player.owner:
-                    for move_to in piece.legal_moves(x,y,board):
+                    for move_to in piece.legal_moves(x, y, board):
                         move = Move(x, y, move_to[0], move_to[1])
                         if Rule.is_legal(board, move, player, players):
                             return False
                         move_promote = Move(x, y, move_to[0], move_to[1], promote=True)
                         if Rule.is_legal(board, move_promote, player, players):
-                             return False 
-                         
+                            return False
+
         for i, p_drop in enumerate(player.captured_pieces):
             for y_drop in range(5):
                 for x_drop in range(5):
                     move = Move(None, None, x_drop, y_drop, piece_to_drop=p_drop)
                     original_captured = player.captured_pieces
-                    player.captured_pieces = original_captured[:i] + original_captured[i+1:]
+                    player.captured_pieces = (
+                        original_captured[:i] + original_captured[i + 1 :]
+                    )
                     if Rule.is_legal(board, move, player):
                         player.captured_pieces = original_captured
                         return False
@@ -302,14 +355,15 @@ class Rule:
 
         return True
 
+
 class Game:
     def __init__(self):
         self.board = Board()
-        self.players = [Player('先手', 0), Player('後手', 1)]
+        self.players = [Player("先手", 0), Player("後手", 1)]
         self.turn = 0
         self.history = []
 
-    def play_move(self, move: 'Move'):
+    def play_move(self, move: "Move"):
         if Rule.is_legal(self.board, move, self.current_player(), self.players):
             self.board.apply(move, self.players)
             self.history.append(move)
@@ -319,7 +373,7 @@ class Game:
             print("--- 不正な手です ---")
             return False
 
-    def current_player(self) -> 'Player':
+    def current_player(self) -> "Player":
         return self.players[self.turn]
 
     def run(self):
@@ -334,17 +388,19 @@ class Game:
 
             if Rule.is_in_check(self.board, player.owner):
                 print("*** 王手です！ ***")
-            
+
             try:
-                raw_input = input("指し手を入力してください (例: 'm 2 3 2 2' or 'd 歩 3 3'): ")
+                raw_input = input(
+                    "指し手を入力してください (例: 'm 2 3 2 2' or 'd 歩 3 3'): "
+                )
                 parts = raw_input.split()
-                
+
                 move = None
-                if parts[0] == 'm' and len(parts) >= 5:
+                if parts[0] == "m" and len(parts) >= 5:
                     fx, fy, tx, ty = map(int, parts[1:5])
-                    promote = len(parts) > 5 and parts[5] == 'p'
+                    promote = len(parts) > 5 and parts[5] == "p"
                     move = Move(fx, fy, tx, ty, promote)
-                elif parts[0] == 'd' and len(parts) == 4:
+                elif parts[0] == "d" and len(parts) == 4:
                     piece_name = parts[1]
                     tx, ty = map(int, parts[2:])
                     piece_to_drop = None
