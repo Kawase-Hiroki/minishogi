@@ -1,4 +1,5 @@
 import copy
+import numpy as np
 
 class Move:
     def __init__(self, from_x, from_y, to_x, to_y, promote=False, piece_to_drop=None):
@@ -31,11 +32,12 @@ class Piece:
     def legal_moves(self, x, y, board):
         raise NotImplementedError("This method should be implemented by subclasses")
 
+    @property
     def name(self):
-        raise NotImplementedError("This method should be implemented by subclasses")
+        raise NotImplementedError("各駒で name プロパティを定義してください")
 
     def short_name(self):
-        return self.name()[-1]
+        return self.name[-1]
 
     def clone(self):
         return self.__class__(self.owner, self.promoted)
@@ -56,8 +58,19 @@ class Piece:
                     break
         return moves
 
+    def encode_index(self, current_player):
+        piece_dict = {
+            '歩': 0, '香': 1, '桂': 2, '銀': 3, '金': 4, '角': 5, '飛': 6, '王': 7,
+            'と': 8, '成香': 9, '成桂': 10, '成銀': 11, '馬': 12, '竜': 13
+        }
+        base = piece_dict.get(self.name, -1)
+        if base == -1:
+            raise ValueError(f"Unknown piece: {self.name}")
+        return base if self.owner == current_player else base + 14
+
 
 class Ohsho(Piece):
+    @property
     def name(self):
         return "王"
 
@@ -76,20 +89,21 @@ class Ohsho(Piece):
 
 
 class Hisha(Piece):
+    @property
     def name(self):
         return "竜" if self.promoted else "飛"
 
     def legal_moves(self, x, y, board):
-        # 飛車の動き
         directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
         moves = self._get_moves_in_directions(x, y, directions, 5, board)
         if self.promoted:
             diag_directions = [(1, 1), (-1, -1), (1, -1), (-1, 1)]
-            moves.extend(self._get_moves_in_directions(x, y, diag_directions, 1))
+            moves.extend(self._get_moves_in_directions(x, y, diag_directions, 1, board))
         return moves
 
 
 class Kakugyo(Piece):
+    @property
     def name(self):
         return "馬" if self.promoted else "角"
 
@@ -98,7 +112,7 @@ class Kakugyo(Piece):
         moves = self._get_moves_in_directions(x, y, directions, 5, board)
         if self.promoted:
             straight_directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
-            moves.extend(self._get_moves_in_directions(x, y, straight_directions, 1))
+            moves.extend(self._get_moves_in_directions(x, y, straight_directions, 1, board))
         return moves
 
 
@@ -118,6 +132,7 @@ def _get_kinsho_moves(x, y, owner, board):
 
 
 class Kinsho(Piece):
+    @property
     def name(self):
         return "金"
 
@@ -126,6 +141,7 @@ class Kinsho(Piece):
 
 
 class Ginsho(Piece):
+    @property
     def name(self):
         return "金" if self.promoted else "銀"
 
@@ -139,6 +155,7 @@ class Ginsho(Piece):
 
 
 class Hohei(Piece):
+    @property
     def name(self):
         return "と" if self.promoted else "歩"
 
@@ -218,7 +235,6 @@ class Board:
                 if piece is None:
                     print(" ・", end="")
                 else:
-                    # 後手の駒はvで表現
                     print(
                         f"{'v' if piece.owner == 1 else 'm'}{piece.short_name()}",
                         end="",
@@ -288,7 +304,6 @@ class Rule:
                     and not p.promoted
                     and p.owner == player.owner
                 ):
-                    print("二歩です。")
                     return False
 
         temp_board = board.clone()
@@ -348,7 +363,7 @@ class Rule:
                     player.captured_pieces = (
                         original_captured[:i] + original_captured[i + 1 :]
                     )
-                    if Rule.is_legal(board, move, player):
+                    if Rule.is_legal(board, move, player, players):
                         player.captured_pieces = original_captured
                         return False
                     player.captured_pieces = original_captured
@@ -426,6 +441,92 @@ class Game:
             except (ValueError, IndexError):
                 print("入力エラーです。数値を正しく入力してください。")
                 continue
+
+def get_legal_moves(board, player, players):
+    legal_moves = []
+
+    for y in range(5):
+        for x in range(5):
+            piece = board.get(x, y)
+            if piece and piece.owner == player.owner:
+                for to_x, to_y in piece.legal_moves(x, y, board):
+                    move_p = Move(x, y, to_x, to_y, promote=True)
+                    if Rule.is_legal(board, move_p, player, players):
+                        legal_moves.append(move_p)
+                    move_np = Move(x, y, to_x, to_y, promote=False)
+                    if Rule.is_legal(board, move_np, player, players):
+                        legal_moves.append(move_np)
+
+    for i, p in enumerate(player.captured_pieces):
+        for y in range(5):
+            for x in range(5):
+                move = Move(None, None, x, y, piece_to_drop=p)
+                if Rule.is_legal(board, move, player, players):
+                    legal_moves.append(move)
+
+    return legal_moves
+
+
+def apply_move(board, move, players):
+    board.apply(move, players)
+    return board
+
+def is_game_over(board, players):
+    for i, player in enumerate(players):
+        if Rule.is_checkmate(board, player, players):
+            return True, 1 - i
+    return False, None
+
+
+def self_play_game(model):
+    board = Board()
+    players = [Player("先手", 0), Player("後手", 1)]
+    history = []
+    turn = 0
+
+    while True:
+        player = players[turn]
+        legal_moves = get_legal_moves(board, player, players)
+
+        if not legal_moves:
+            break
+
+        board_tensor = np.zeros((5, 5, 23), dtype=np.float32)
+
+        policy_pred, value_pred = model.predict(np.expand_dims(board_tensor, axis=0), verbose=0)
+        move = legal_moves[np.random.randint(len(legal_moves))]
+
+        board = apply_move(board, move, players)
+        history.append((board_tensor, move))
+        is_over, winner = is_game_over(board, players)
+        if is_over:
+            return [(b, move, 1 if winner == turn else -1) for b, move in history]
+
+        turn = 1 - turn
+
+def train_model(model, games):
+
+    X = []
+    y_policy = []
+    y_value = []
+
+    for board_tensor, move, result in games:
+        X.append(board_tensor)
+        policy_label = np.zeros(4672)
+        policy_label[0] = 1
+        y_policy.append(policy_label)
+
+        y_value.append(result)
+
+    X = np.array(X)
+    y_policy = np.array(y_policy)
+    y_value = np.array(y_value)
+
+    model.compile(optimizer="adam",
+                  loss={"policy_head": "categorical_crossentropy", "value_head": "mse"},
+                  loss_weights={"policy_head": 1.0, "value_head": 1.0})
+    
+    model.fit(X, {"policy_head": y_policy, "value_head": y_value}, batch_size=32, epochs=1)
 
 
 if __name__ == "__main__":
